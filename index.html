@@ -2935,11 +2935,24 @@ const water = new THREE.Mesh(waterGeo, new THREE.ShaderMaterial({
       // 近岸透出一点绿意
       col = mix(col, vec3(0.13, 0.29, 0.23), (1.0 - smoothstep(0.0, 9.0, dShore)) * 0.32);
 
-      // 岸边泡沫
+      // 岸边泡沫：沿 x 起伏的软边 + 跟着拍岸周期涨落的宽度 + 一条推到岸边的白线 + 细碎浪脊
       float side = step(vWorld.z, shoreZ(vWorld.x));
-      float foamMask = smoothstep(2.2, 0.0, dShore) * side;
-      float foamTex = 0.5 + 0.5 * sin(dShore * 12.0 - uTime * 2.0 + sin(vWorld.x * 0.7) * 2.2);
-      col = mix(col, vec3(0.82, 0.88, 0.85), foamMask * (0.22 + 0.42 * foamTex));
+      float nEdge = pNoise(vec2(vWorld.x * 0.55, 0.0)) - 0.5;
+      float nFoam = pNoise(vec2(vWorld.x * 2.3 + uTime * 0.22, dShore * 1.7 - uTime * 0.5));
+      float dB = dShore + nEdge * 1.5;
+      float cyc = fract(uTime * 0.16 + sin(vWorld.x * 0.085) * 0.27 + 0.13);
+      float surge = cyc < 0.26 ? cyc / 0.26 : 1.0 - (cyc - 0.26) / 0.74;
+      // 前缘离岸距离：随拍岸周期往复，正对镜头也能看到浪线一段段推过来
+      float frontD = 0.30 + surge * 2.6 + nEdge * 2.4 + (nFoam - 0.5) * 0.8;
+      float foamMask = smoothstep(frontD + 0.35, max(frontD - 1.3, 0.0), dB) * side;
+      // 远岸泡沫在 3m 网格上会走样，按距离淡出
+      float fadeFar = 1.0 - smoothstep(55.0, 125.0, length(cameraPosition - vWorld));
+      foamMask *= fadeFar;
+      float crestLine = smoothstep(0.26, 0.0, abs(dB - frontD)) * side * fadeFar;
+      float foamTex = smoothstep(0.35, 0.85, nFoam);
+      float crest = 0.5 + 0.5 * sin(dB * 9.0 - uTime * 2.4 + nEdge * 6.0);
+      col = mix(col, vec3(0.84, 0.90, 0.87), foamMask * (0.10 + 0.32 * foamTex + 0.16 * crest * crest)
+                                                     + crestLine * (0.34 + 0.26 * foamTex));
 
       float fogF = smoothstep(uFogNear, uFogFar, dist);
       col = mix(col, uFogColor, fogF);
@@ -2952,6 +2965,126 @@ const water = new THREE.Mesh(waterGeo, new THREE.ShaderMaterial({
 }));
 water.position.set(0, 0, -120);
 scene.add(water);
+
+/* ---------------------- 岸边浪：贴着沙滩的涨落水膜 + 泡沫 ---------------------- *
+ * 水面本身是一整块平面，和沙滩相交只会得到一条硬边。这里沿海岸线另铺一条窄带，
+ * 顶点直接采样地形高度，片元里用"沿岸错相的冲-退周期"推动水膜前缘：
+ * 冲上岸快、退回去慢，前缘带泡沫、膜内有泡沫丝、刚退过的沙子留一道湿痕。
+ * 全部程序化，零贴图，只多一个 draw call。 */
+const swashUniforms = {
+  uTime: { value: 0 },
+  uFoam: { value: new THREE.Color(0xe9f2ec) },
+};
+function buildSwashRibbon() {
+  const X0 = -78, X1 = 78, STEP = 1.0;
+  const cols = Math.round((X1 - X0) / STEP) + 1;
+  const rows = 14;
+  const pos = new Float32Array(cols * rows * 3);
+  const dArr = new Float32Array(cols * rows);
+  const idx = [];
+  for (let i = 0; i < cols; i++) {
+    const x = X0 + i * STEP;
+    // 沿岸线求水线（terrainHeight 由负转正的穿越点）
+    let prev = terrainHeight(x, shoreZ(x) - 4);
+    let zw = shoreZ(x);
+    for (let z = shoreZ(x) - 4; z <= shoreZ(x) + 3.5; z += 0.08) {
+      const h = terrainHeight(x, z);
+      if (prev < 0 && h >= 0) { zw = z - 0.08 * (h / (h - prev || 1e-4)); break; }
+      prev = h;
+    }
+    for (let j = 0; j < rows; j++) {
+      const k = i * rows + j;
+      const z = zw - 2.4 + (j / (rows - 1)) * 5.4;   // 湖侧 2.4m → 岸上 3m
+      pos[k * 3] = x;
+      // 湖侧地形低于水面，若只跟地形会把整片水膜埋在水下；这里抬到平均水面之上，
+      // 正对镜头时才能看见"推上来的那一层水"和它的泡沫前缘
+      pos[k * 3 + 1] = Math.max(terrainHeight(x, z) + 0.07, 0.16);
+      pos[k * 3 + 2] = z;
+      dArr[k] = z - zw;
+    }
+    if (i > 0) {
+      for (let j = 0; j < rows - 1; j++) {
+        const a = (i - 1) * rows + j, b = i * rows + j;
+        idx.push(a, b, a + 1, b, b + 1, a + 1);
+      }
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('aD', new THREE.BufferAttribute(dArr, 1));
+  geo.setIndex(idx);
+  const mat = new THREE.ShaderMaterial({
+    uniforms: swashUniforms,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+    vertexShader: /* glsl */`
+      attribute float aD;
+      varying float vD;
+      varying vec3 vW;
+      void main(){
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vW = wp.xyz;
+        vD = aD;
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }
+    `,
+    fragmentShader: PROC_NOISE + /* glsl */`
+      uniform float uTime;
+      uniform vec3 uFoam;
+      varying float vD;
+      varying vec3 vW;
+      void main(){
+        // 沿岸错相：同一条岸不会整条同时拍上来
+        float ph = sin(vW.x * 0.085) * 1.7 + sin(vW.x * 0.21 + 2.0) * 0.55;
+        float cyc = fract(uTime * 0.16 + ph * 0.159 + 0.13);
+        // 冲上岸快、退回去慢
+        float run = cyc < 0.26 ? smoothstep(0.0, 0.26, cyc) : 1.0 - smoothstep(0.26, 1.0, cyc);
+        // 前缘能一直推到 1.9m 左右的水面上，正对镜头也看得出"往前推"
+        float reach = 1.30 + 0.75 * sin(vW.x * 0.13 + 1.4) + 0.42 * sin(vW.x * 0.37);
+        float front = mix(-0.55, reach, run);
+
+        // 前缘的不规则（噪声抖动 + 横向漂移），避免一条直线上下平移
+        float n1 = pNoise(vec2(vW.x * 1.6 + uTime * 0.20, vD * 2.2 - uTime * 0.55));
+        float n2 = pNoise(vec2(vW.x * 5.4, vD * 5.5 - uTime * 0.9));
+        float edge = front + (n1 - 0.5) * 0.62 + (n2 - 0.5) * 0.20;
+
+        float film = smoothstep(edge + 0.06, edge - 0.6, vD);      // 水膜覆盖
+        float band = smoothstep(0.50, 0.0, abs(vD - edge));        // 前缘泡沫带
+        float lace = smoothstep(0.55, 0.82, n1 * 0.65 + n2 * 0.55) * film; // 膜内泡沫丝
+        float line = smoothstep(0.16, 0.0, abs(vD - edge));        // 前缘那一道白线
+
+        vec3 wetCol = vec3(0.28, 0.24, 0.18);
+        float wetA = smoothstep(edge + 0.05 + n2 * 0.45, edge + 1.4 + n1 * 0.9, vD) * 0.50;
+
+        vec3 filmCol = mix(vec3(0.12, 0.31, 0.27), uFoam, clamp(band * 0.95 + lace * 0.6 + line * 0.55, 0.0, 1.0));
+        float filmA = clamp(film * 0.80 + band * 0.60 + lace * 0.32 + line * 0.42, 0.0, 0.95);
+
+        float inFilm = step(vD, edge);
+        vec3 col = mix(wetCol, filmCol, inFilm);
+        float a = mix(wetA, filmA, inFilm);
+
+        // 窄带两端淡出 + 远处淡出，避免看到带子的直边
+        a *= smoothstep(-2.3, -1.4, vD);
+        a *= 1.0 - smoothstep(2.3, 3.0, vD);
+        a *= 1.0 - smoothstep(46.0, 76.0, length(cameraPosition - vW));
+
+        gl_FragColor = vec4(col, a);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }
+    `,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.renderOrder = 2;
+  mesh.frustumCulled = false;
+  return mesh;
+}
+const swash = buildSwashRibbon();
+scene.add(swash);
 
 /* ---------------------------- 地形 ---------------------------- */
 function buildTerrain() {
@@ -3122,27 +3255,45 @@ function buildScenery() {
   });
   group.add(trunks, ...canopies);
 
-  // 远岸密林剪影：连续林带比一排小锥体更像真实远景
+  // 远岸密林剪影：连续林带比一排小锥体更像真实远景。
+  // 高度必须"采样足够密"：早先用 |sin(i*1.9)| 逐点取高，周期只有 1.6 个采样点，
+  // 混叠后就成了竖台阶 + 尖刺状假峰（近看像被撕开的三角缺口）；这里改成整数波长包络 + 圆顶鼓包。
   {
-    const N = 150;
+    const N = 240;
     const bandGeo = new THREE.BufferGeometry();
-    const pos = [], idx = [];
+    const pos = [], cols = [], idx = [];
+    const cTop = new THREE.Color(0x3a5445);   // 树冠迎光
+    const cBot = new THREE.Color(0x1b2822);   // 树脚背光
+    const tc = new THREE.Color();
     for (let i = 0; i <= N; i++) {
       const x = -370 + (740 * i) / N;
-      const z = farShoreZ(x) - 58 + Math.sin(i * 0.7) * 2.5;
+      const z = farShoreZ(x) - 58 + Math.sin(x * 0.021) * 1.2;
       const base = terrainHeight(x, z) - 1.5;
-      const h = 8 + Math.abs(Math.sin(i * 0.53)) * 7 + Math.abs(Math.sin(i * 1.9)) * 4.5;
+      // 包络：波长 560 / 232 / 103 单位，每波长 180 / 75 / 33 个采样点，不会混叠
+      const env = 7.2 + 3.4 * Math.sin(x * 0.0112 + 1.2)
+                      + 2.3 * Math.sin(x * 0.0271 + 3.1)
+                      + 1.4 * Math.sin(x * 0.0613 + 0.4);
+      // 成簇的圆顶树冠：波长 40 / 23 单位，每簇 13 / 7.5 个采样点
+      const crown = 1.8 * Math.abs(Math.sin(x * 0.158 + 0.7))
+                  + 0.8 * Math.abs(Math.sin(x * 0.271 + 2.4))
+                  + 0.35 * Math.sin(x * 0.35 + 1.9);
+      const h = Math.max(4.2, env + crown);
       pos.push(x, base, z, x, base + h, z);
+      tc.copy(cBot);
+      cols.push(tc.r, tc.g, tc.b);
+      tc.copy(cTop).lerp(cBot, 0.30 + 0.26 * Math.sin(x * 0.047 + 1.1));
+      cols.push(tc.r, tc.g, tc.b);
     }
     for (let i = 0; i < N; i++) {
       const a = i * 2, b = a + 1, c = a + 2, d = a + 3;
       idx.push(a, c, b, b, c, d);
     }
     bandGeo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    bandGeo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
     bandGeo.setIndex(idx);
     bandGeo.computeVertexNormals();
     const bandMat = new THREE.MeshStandardMaterial({
-      color: 0x25382f, roughness: 1, side: THREE.DoubleSide,
+      color: 0xffffff, vertexColors: true, roughness: 1, side: THREE.DoubleSide,
     });
     group.add(new THREE.Mesh(bandGeo, bandMat));
   }
@@ -3329,57 +3480,122 @@ function buildScenery() {
 scene.add(buildScenery());
 
 /* ---------------------------- 垂钓者 ---------------------------- */
+// 前臂摆位：肘点固定，手腕点由握竿的手每帧给出，靠 scale.y 拉伸单位圆柱，避免手与袖口脱节
+const _upAxis = new THREE.Vector3(0, 1, 0);
+const _armDir = new THREE.Vector3();
+const _wristPos = new THREE.Vector3();
+function placeForearm(mesh, elbow, wrist) {
+  _armDir.subVectors(wrist, elbow);
+  const len = _armDir.length() || 0.0001;
+  _armDir.divideScalar(len);
+  mesh.position.copy(elbow).addScaledVector(_armDir, len * 0.5);
+  mesh.quaternion.setFromUnitVectors(_upAxis, _armDir);
+  mesh.scale.y = len;
+}
+
 function buildAngler() {
   const g = new THREE.Group();
+  const body = new THREE.Group();   // 上半身：呼吸/重心微调只动这里，双脚始终踩在地上
+  g.add(body);
 
-  const skinMat = new THREE.MeshStandardMaterial({ color: 0xd3a481, roughness: 0.85 });
+  const skinMat = new THREE.MeshStandardMaterial({ color: 0xd6a884, roughness: 0.78 });
   const jacketMat = new THREE.MeshStandardMaterial({ color: 0x3d5a4a, roughness: 0.9 });
+  const jacketDarkMat = new THREE.MeshStandardMaterial({ color: 0x2f4839, roughness: 0.92 });
   const pantsMat = new THREE.MeshStandardMaterial({ color: 0x33404a, roughness: 0.95 });
-  const bootMat = new THREE.MeshStandardMaterial({ color: 0x23282c, roughness: 1 });
+  const bootMat = new THREE.MeshStandardMaterial({ color: 0x23282c, roughness: 0.86 });
+  const soleMat = new THREE.MeshStandardMaterial({ color: 0x151a1d, roughness: 1 });
   const hatMat = new THREE.MeshStandardMaterial({ color: 0x6a5638, roughness: 0.92 });
+  const hatBandMat = new THREE.MeshStandardMaterial({ color: 0x41331d, roughness: 0.9 });
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x2a2018, roughness: 0.55 });
 
-  // 腿
+  const put = (geo, mat, x, y, z, parent) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    (parent || g).add(m);
+    return m;
+  };
+  // 两点之间的一节圆柱（大臂这类静态骨节）
+  const seg = (a, b, rb, rt, mat, parent) => {
+    const d = new THREE.Vector3().subVectors(b, a);
+    const len = d.length() || 0.0001;
+    const dir = d.clone().divideScalar(len);
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, len, 9), mat);
+    m.position.copy(a).addScaledVector(dir, len * 0.5);
+    m.quaternion.setFromUnitVectors(_upAxis, dir);
+    (parent || g).add(m);
+    return m;
+  };
+
+  /* ---------- 腿：大腿/小腿 + 裤褶 + 靴筒/靴面/鞋底 ---------- */
   for (const sx of [-1, 1]) {
-    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.075, 0.86, 8), pantsMat);
-    leg.position.set(sx * 0.13, 0.5, 0);
-    g.add(leg);
-    const boot = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.14, 0.3), bootMat);
-    boot.position.set(sx * 0.13, 0.1, 0.04);
-    g.add(boot);
+    // 大腿比小腿略宽一点，膝盖处自然形成一道垂布的折痕阴影
+    put(new THREE.CylinderGeometry(0.100, 0.090, 0.38, 10), pantsMat, sx * 0.104, 0.89, 0);      // 大腿
+    put(new THREE.CylinderGeometry(0.079, 0.063, 0.42, 10), pantsMat, sx * 0.106, 0.52, 0.004);  // 小腿
+    put(new THREE.CylinderGeometry(0.086, 0.079, 0.20, 10), bootMat, sx * 0.106, 0.22, 0.004);    // 靴筒
+    const foot = put(new THREE.CapsuleGeometry(0.047, 0.150, 4, 8), bootMat, sx * 0.106, 0.072, 0.055);
+    foot.rotation.x = Math.PI / 2;                                                              // 靴面
+    put(new THREE.BoxGeometry(0.168, 0.030, 0.285), soleMat, sx * 0.106, 0.016, 0.052);          // 鞋底
   }
-  // 躯干
-  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.21, 0.26, 0.78, 10), jacketMat);
-  torso.position.y = 1.24;
-  g.add(torso);
-  // 肩
-  const shoulders = new THREE.Mesh(new THREE.CapsuleGeometry(0.15, 0.28, 4, 8), jacketMat);
-  shoulders.rotation.z = Math.PI / 2;
-  shoulders.position.y = 1.6;
-  g.add(shoulders);
-  // 头
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.145, 14, 12), skinMat);
-  head.position.y = 1.82;
-  g.add(head);
-  // 帽子
-  const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.30, 0.30, 0.022, 16), hatMat);
-  brim.position.y = 1.92;
-  g.add(brim);
-  const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.155, 0.13, 12), hatMat);
-  crown.position.y = 1.98;
-  g.add(crown);
-  // 手臂：先向前上方伸出，再收回握竿
+
+  /* ---------- 夹克躯干：肩宽 → 收腰 → 下摆放开 ---------- */
+  const profile = [
+    [0.212, 0.955], [0.234, 0.995], [0.216, 1.075], [0.221, 1.16],
+    [0.238, 1.30], [0.243, 1.375], [0.232, 1.455], [0.196, 1.535],
+    [0.150, 1.59], [0.110, 1.62],
+  ].map(p => new THREE.Vector2(p[0], p[1]));
+  const torso = new THREE.Mesh(new THREE.LatheGeometry(profile, 18), jacketMat);
+  torso.scale.z = 0.72;                        // 压扁成椭圆截面，不再是圆桶
+  body.add(torso);
+  put(new THREE.CylinderGeometry(0.236, 0.243, 0.06, 18), jacketDarkMat, 0, 0.985, 0, body).scale.z = 0.72;  // 下摆压边
+  put(new THREE.CylinderGeometry(0.222, 0.222, 0.052, 18), jacketDarkMat, 0, 1.10, 0, body).scale.z = 0.72;  // 腰带
+  put(new THREE.CylinderGeometry(0.116, 0.146, 0.07, 14), jacketDarkMat, 0, 1.625, 0, body).scale.z = 0.82;  // 领口
+  for (const sx of [-1, 1]) {                  // 胸袋
+    const p = put(new THREE.BoxGeometry(0.10, 0.088, 0.014), jacketDarkMat, sx * 0.104, 1.335, 0.150, body);
+    p.rotation.x = 0.06;
+    p.rotation.y = sx * 0.30;
+  }
+
+  /* ---------- 头颈 / 帽子 ---------- */
+  put(new THREE.CylinderGeometry(0.061, 0.076, 0.10, 10), skinMat, 0, 1.70, 0.004, body);   // 脖子
+  const headG = new THREE.Group();
+  headG.position.y = 1.792;
+  body.add(headG);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.145, 18, 14), skinMat);
+  head.scale.set(0.93, 1.02, 0.97);
+  headG.add(head);
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 6), skinMat);
+  nose.scale.set(0.85, 0.95, 1.3);
+  nose.position.set(0, -0.012, 0.132);
+  headG.add(nose);
   for (const sx of [-1, 1]) {
-    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.05, 0.52, 8), jacketMat);
-    arm.position.set(sx * 0.21, 1.5, 0.15);
-    arm.rotation.x = 0.85;
-    arm.rotation.z = sx * 0.12;
-    g.add(arm);
+    const ear = new THREE.Mesh(new THREE.SphereGeometry(0.032, 8, 6), skinMat);
+    ear.scale.set(0.42, 1.0, 0.85);
+    ear.position.set(sx * 0.129, -0.01, -0.008);
+    headG.add(ear);
   }
-  // 手
-  const handMat = skinMat;
-  const hand = new THREE.Mesh(new THREE.SphereGeometry(0.075, 8, 8), handMat);
-  hand.position.set(0.2, 1.34, 0.34);
-  g.add(hand);
+  // 眼睛：两颗极小的深色球，给这张脸一个焦点（纯几何，无贴图）
+  for (const sx of [-1, 1]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.0105, 7, 6), eyeMat);
+    eye.position.set(sx * 0.047, 0.022, 0.128);
+    headG.add(eye);
+  }
+  put(new THREE.CylinderGeometry(0.298, 0.306, 0.02, 20), hatMat, 0, 0.112, 0.004, headG).rotation.x = -0.04; // 帽檐
+  put(new THREE.CylinderGeometry(0.152, 0.158, 0.05, 16), hatBandMat, 0, 0.147, 0.004, headG);              // 帽箍
+  put(new THREE.CylinderGeometry(0.113, 0.152, 0.12, 16), hatMat, 0, 0.192, 0.004, headG);                 // 帽冠
+
+  /* ---------- 上肢：三角肌 + 大臂（前臂随后续握竿动态接上）---------- */
+  const shoulderR = new THREE.Vector3(0.176, 1.512, 0.012);
+  const shoulderL = new THREE.Vector3(-0.176, 1.512, 0.012);
+  const elbowR = new THREE.Vector3(0.262, 1.322, 0.252);
+  const elbowL = new THREE.Vector3(-0.018, 1.344, 0.266);
+  for (const sx of [-1, 1]) {
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.088, 12, 10), jacketMat);
+    cap.scale.set(1.02, 0.90, 0.95);
+    cap.position.set(sx * 0.176, 1.508, 0.012);
+    body.add(cap);
+  }
+  seg(shoulderR, elbowR, 0.072, 0.058, jacketMat, body);
+  seg(shoulderL, elbowL, 0.072, 0.058, jacketMat, body);
 
   // 鱼竿
   const rod = new THREE.Group();
@@ -3388,9 +3604,14 @@ function buildAngler() {
     color: 0x241f19, roughness: 0.45, metalness: 0.1,
     clearcoat: 0.9, clearcoatRoughness: 0.22,
   });
-  const blank = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.02, 2.6, 6), rodMat);
+  // 竿身：多段圆柱，逐帧按弯曲量改写顶点（见 applyRodBend），上身受力时能弯成弓形
+  const blankGeo = new THREE.CylinderGeometry(0.006, 0.02, 2.6, 6, 16);
+  const blank = new THREE.Mesh(blankGeo, rodMat);
   blank.position.y = 1.3;
   rod.add(blank);
+  rod.userData.blank = blank;
+  rod.userData.blankBase = new Float32Array(blankGeo.attributes.position.array);
+  rod.userData.lastBend = 0;
   const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.42, 8),
     addProcedural(new THREE.MeshStandardMaterial({
       color: 0xffffff, roughness: 0.55,
@@ -3410,9 +3631,59 @@ function buildAngler() {
   rod.add(tip);
   rod.rotation.x = 1.02;
 
-  g.add(rod);
+  /* ---------- 双手：掌 + 四指绕竿弯起 + 拇指压在竿身外侧 ---------- */
+  const handLocal = [0.16, 0.055];       // 竿局部坐标：右手在上、左手在下（两手都握在握把上）
+  const hands = [];
+  const fingerMat = skinMat;
+  handLocal.forEach((hy, i) => {
+    const sgn = i === 0 ? 1 : -1;
+    const h = new THREE.Group();
+    h.position.set(0, hy, 0);
+    rod.add(h);
+    // 掌：贴在竿后侧，压扁的椭球
+    const palm = new THREE.Mesh(new THREE.SphereGeometry(0.048, 10, 8), skinMat);
+    palm.scale.set(0.76, 0.90, 0.60);
+    palm.position.set(0, 0, -0.042);
+    h.add(palm);
+    // 四指：绕竿轴的圆弧，从掌侧包到竿前侧（明显是"握住"的弯指）
+    for (let k = 0; k < 4; k++) {
+      const f = new THREE.Mesh(
+        new THREE.TorusGeometry(0.0452, 0.0105, 4, 7, 1.95), fingerMat);
+      f.rotation.x = Math.PI / 2;
+      f.rotation.z = sgn > 0 ? -0.30 : Math.PI + 0.30;
+      f.position.set(0, (k - 1.5) * 0.0215, 0);
+      h.add(f);
+    }
+    // 拇指：沿竿身斜压上去
+    const thumb = new THREE.Mesh(new THREE.CapsuleGeometry(0.0145, 0.050, 3, 6), skinMat);
+    thumb.position.set(sgn * -0.040, 0.040, -0.026);
+    thumb.rotation.x = 0.30;
+    thumb.rotation.z = sgn * 0.45;
+    h.add(thumb);
+    hands.push(h);
+  });
+
+  /* ---------- 前臂：每帧按"肘点 → 手腕点"重新摆位，单位圆柱沿 Y 拉伸 ---------- */
+  const forearms = [];
+  const wristLocal = [new THREE.Vector3(0, 0.155, -0.075), new THREE.Vector3(0, 0.050, -0.075)];
+  for (let i = 0; i < 2; i++) {
+    const fa = new THREE.Mesh(new THREE.CylinderGeometry(0.050, 0.060, 1, 9), jacketMat);
+    body.add(fa);
+    const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.053, 0.053, 0.05, 10), jacketDarkMat);
+    cuff.position.y = 0.40;
+    fa.add(cuff);
+    forearms.push({ mesh: fa, elbow: i === 0 ? elbowR : elbowL, wristLocal: wristLocal[i], hand: hands[i] });
+  }
+
+  body.add(rod);
   g.userData.rod = rod;
   g.userData.tip = tip;
+  g.userData.body = body;
+  g.userData.head = headG;
+  g.userData.forearms = forearms;
+  g.userData.hands = hands;
+  g.userData.idleW = 0;
+  g.userData.bend = 0;
 
   g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   return g;
@@ -3424,6 +3695,23 @@ angler.rotation.y = Math.PI;  // 模型 +Z 为正面，面朝湖（-Z）
 scene.add(angler);
 
 const rodTipWorld = new THREE.Vector3();
+
+/* 竿身弯曲：沿竿身把顶点按 u² 向 +Z 推，竿梢同步偏移（tip 挂在竿上，鱼线跟着走） */
+function applyRodBend(off) {
+  if (!Number.isFinite(off)) off = 0;
+  const r = angler.userData.rod;
+  if (Math.abs(off - r.userData.lastBend) < 0.0003) return;
+  r.userData.lastBend = off;
+  const pos = r.userData.blank.geometry.attributes.position;
+  const base = r.userData.blankBase;
+  const arr = pos.array;
+  for (let i = 0, n = pos.count; i < n; i++) {
+    const u = (base[i * 3 + 1] + 1.3) / 2.6;
+    arr[i * 3 + 2] = base[i * 3 + 2] + off * u * u;
+  }
+  pos.needsUpdate = true;
+  angler.userData.tip.position.z = off;
+}
 
 /* ---------------------------- 浮漂 + 鱼线 ---------------------------- */
 function makeHaloTexture() {
@@ -3987,6 +4275,7 @@ function endFight(reason) {
   G.retrieveT = 0;
   G.fight = null;
   if (reason === 'snap') {
+    snapKickT = 0;        // 竿身往回弹
     Sound.snap();
     setHintLocked(T('啪！张力触顶，鱼线断了，鱼跑了', 'Snap! The line broke — the fish is gone'), 2.4);
   } else if (reason === 'slack') {
@@ -4014,6 +4303,9 @@ let hookAnimT = HOOK_ANIM_DUR;
 // 竿身自身的平滑姿态单独保存：刺鱼角度只做叠加，不参与下一帧的阻尼，避免角度越减越多
 let rodBaseX = 1.02;
 let rodBaseY = 0;
+// 断线瞬间的竿身回弹（秒）：一次性反向过冲后快速收敛
+const SNAP_KICK_DUR = 0.62;
+let snapKickT = SNAP_KICK_DUR;
 
 function startHookAnim() { hookAnimT = 0; }
 
@@ -4056,6 +4348,42 @@ function updateAnglerAndBobber(dt) {
   rod.rotation.y = rodY;
   rod.rotation.z = rodZ;
 
+  // ---- 待机微动：呼吸（躯干起伏）、重心左右移、头部与持竿的细微漂移 ----
+  // 只在 IDLE 生效，权重平滑升降，所以蓄力/刺鱼/遛鱼姿态一点不受影响
+  const ud = angler.userData;
+  ud.idleW = damp(ud.idleW, G.mode === 'IDLE' ? 1 : 0, 3.2, dt);
+  const iw = ud.idleW;
+  const br = Math.sin(t * 1.35);
+  const wt = Math.sin(t * 0.44);
+  ud.body.position.x = wt * 0.010 * iw;
+  ud.body.position.y = br * 0.004 * iw;
+  ud.body.rotation.z = -wt * 0.009 * iw;
+  ud.body.scale.y = 1 + br * 0.008 * iw;
+  ud.head.rotation.y = (Math.sin(t * 0.27) * 0.11 + Math.sin(t * 0.13 + 1.2) * 0.05) * iw;
+  ud.head.rotation.x = Math.sin(t * 0.19) * 0.035 * iw;
+  rod.rotation.z += Math.sin(t * 0.73) * 0.008 * iw;
+  rod.rotation.x += Math.sin(t * 1.35 + 0.6) * 0.004 * iw;
+
+  // ---- 竿身弯曲：张力越大弓得越狠；鱼发力、收线时跟上；断线瞬间反向回弹 ----
+  let bendTarget = 0;
+  if (G.mode === 'FIGHT' && G.fight) {
+    const f = G.fight;
+    bendTarget = 0.05 + Math.pow(f.tension, 1.55) * 0.62;
+    if (f.surgeLeft > 0) bendTarget += 0.06 + 0.10 * f.vibrate;   // 鱼发力冲刺
+    if (G.holding) bendTarget += 0.045;                            // 正在收线
+  } else if (G.mode === 'BITE') bendTarget = 0.07;
+  else if (G.mode === 'WAITING') bendTarget = 0.015;
+  else if (G.mode === 'RETRIEVE' || G.mode === 'LANDING') bendTarget = 0.02;
+  ud.bend = damp(ud.bend, bendTarget,
+    G.mode === 'FIGHT' ? 7 : (snapKickT < SNAP_KICK_DUR ? 22 : 4.5), dt);
+  let kick = 0;
+  if (snapKickT < SNAP_KICK_DUR) {
+    snapKickT = Math.min(SNAP_KICK_DUR, snapKickT + dt);
+    const k = 1 - snapKickT / SNAP_KICK_DUR;
+    kick = Math.cos(snapKickT * 30) * k * k * 0.42;   // 断线：竿先向后甩再回正
+  }
+  applyRodBend(ud.bend - kick);
+
   // 人偶朝向只跟玩家拖动的视角走：拖动时平滑转身，松手后停在当前朝向，不自己转
   if (G.time - camState.lastDrag < 1.4) {
     angler.rotation.y = dampAngle(angler.rotation.y, camState.yaw + Math.PI, 7, dt);
@@ -4064,6 +4392,16 @@ function updateAnglerAndBobber(dt) {
   // 蓄力时浮漂还在手上，不画出来（连带着鱼线也收起），画面上只留一条落点预览线
   bobber.visible = G.mode !== 'CHARGING';
 
+  // 前臂跟着握竿的手走（手挂在竿上，随竿一起动），再更新一次矩阵让竿梢位置正确
+  angler.updateMatrixWorld(true);
+  for (let i = 0; i < ud.forearms.length; i++) {
+    const a = ud.forearms[i];
+    a.hand.updateWorldMatrix(true, false);
+    _wristPos.copy(a.wristLocal);
+    a.hand.localToWorld(_wristPos);
+    angler.worldToLocal(_wristPos);
+    placeForearm(a.mesh, a.elbow, _wristPos);
+  }
   angler.updateMatrixWorld(true);
   tip.getWorldPosition(rodTipWorld);
 
@@ -6073,23 +6411,13 @@ updatePostSize();
 const AIM_POINTS = 26;
 const aimGeo = new THREE.BufferGeometry();
 aimGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(AIM_POINTS * 3), 3));
-const aimLine = new THREE.Line(aimGeo, new THREE.LineBasicMaterial({
-  color: 0xffeacc, transparent: true, opacity: 0.62, depthWrite: false,
+// 蓄力时的抛投弧线：明显的虚线（瞄准辅助），不能读成已经抛出去的鱼线
+const aimLine = new THREE.Line(aimGeo, new THREE.LineDashedMaterial({
+  color: 0xffdcae, transparent: true, opacity: 1.0, dashSize: 0.55, gapSize: 0.40, depthWrite: false,
 }));
 aimLine.frustumCulled = false;
 aimLine.visible = false;
 scene.add(aimLine);
-
-// 水面上的方向虚线：从近岸一直指到落点，透视下比高空弧线更容易看清朝向
-const AIM_DASH_PTS = 16;
-const aimDashGeo = new THREE.BufferGeometry();
-aimDashGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(AIM_DASH_PTS * 3), 3));
-const aimDash = new THREE.Line(aimDashGeo, new THREE.LineDashedMaterial({
-  color: 0xffe2b8, transparent: true, opacity: 0.72, dashSize: 0.9, gapSize: 0.62, depthWrite: false,
-}));
-aimDash.frustumCulled = false;
-aimDash.visible = false;
-scene.add(aimDash);
 
 const aimRing = new THREE.Mesh(
   new THREE.RingGeometry(0.5, 0.76, 30),
@@ -6105,7 +6433,6 @@ scene.add(aimRing);
 function updateAimPreview() {
   const on = G.mode === 'CHARGING';
   aimLine.visible = on;
-  aimDash.visible = on;
   aimRing.visible = on;
   if (!on) return;
   const cfg = CONFIG.cast;
@@ -6130,20 +6457,7 @@ function updateAimPreview() {
     arr[i * 3 + 2] = from.z + (tz - from.z) * k;
   }
   aimGeo.attributes.position.needsUpdate = true;
-
-  // 水面虚线（贴水面，随浪起伏）
-  const darr = aimDashGeo.attributes.position.array;
-  for (let i = 0; i < AIM_DASH_PTS; i++) {
-    const k = i / (AIM_DASH_PTS - 1);
-    const dd = 2 + (dist - 2) * k;
-    const x = angler.position.x + dirX * dd;
-    const z = angler.position.z + dirZ * dd;
-    darr[i * 3] = x;
-    darr[i * 3 + 1] = waveHeight(x, z, G.time) + 0.035;
-    darr[i * 3 + 2] = z;
-  }
-  aimDashGeo.attributes.position.needsUpdate = true;
-  aimDash.computeLineDistances();
+  aimLine.computeLineDistances();
 
   // 落点环按距离放大，远投也看得见
   const rs = 0.85 + dist * 0.028;
@@ -6160,6 +6474,7 @@ function animate() {
   G.time += dt;
 
   waterUniforms.uTime.value = G.time;
+  swashUniforms.uTime.value = G.time;
   windUniform.value = G.time;
   skyUniforms.uTime.value = G.time;
   if (gradePass) gradePass.uniforms.uTime.value = G.time;
