@@ -167,7 +167,7 @@
   }
   #fightPanel.hand-left{left:auto;right:24px;}
   #fightPanel.hand-left .fightBody{flex-direction:row-reverse;}
-  /* 面板始终贴屏幕侧边底部；遛鱼时浮漂小窗自动避到另一侧，不再把面板往上顶 */
+  /* 侧边与底距由 JS layoutFightPanel() 按可用空间写入，避开位置固定的浮漂小窗 */
   #fightPanel.on{opacity:1;transform:translateY(0);}
   .fLabel{
     display:flex;justify-content:space-between;align-items:baseline;
@@ -3974,6 +3974,8 @@ const powerWrap = document.getElementById('powerWrap');
 const powerFill = document.getElementById('powerFill');
 const powerText = document.getElementById('powerText');
 const fightPanel = document.getElementById('fightPanel');
+let fightPanelShown = false;
+let fightPanelHand = '';
 const tensionTrackEl = document.getElementById('tensionTrack');
 const tensionNeedle = document.getElementById('tensionNeedle');
 const tensionNum = document.getElementById('tensionNum');
@@ -4760,8 +4762,6 @@ function updateCamera(dt) {
 const pipRect = { x: 0, y: 0, w: 0, h: 0 };
 const pipLook = new THREE.Vector3();
 let pipVisible = false;
-// 遛鱼面板占左侧时，浮漂小窗换到右侧，两者都贴底且不重叠
-let pipRightSide = false;
 let pipSnap = true;
 
 const pipRT = new THREE.WebGLRenderTarget(2, 2, { depthBuffer: true, stencilBuffer: false });
@@ -4811,7 +4811,7 @@ function layoutPip() {
     ? Math.round(clamp(W * 0.42, 150, 200))
     : Math.round(clamp(W * 0.24, 260, 340));
   const h = Math.round(w * 0.66);
-  const x = compact ? 12 : (pipRightSide ? Math.round(W - w - 24) : 24);
+  const x = compact ? 12 : 24;
   const y = compact ? 58 : Math.round(H - 118 - h);
 
   // 离屏缓冲按像素比放大，贴片用 NDC 定位到同一矩形，保证与 DOM 边框完全重合
@@ -4831,6 +4831,58 @@ function layoutPip() {
   pipRect.x = x; pipRect.y = y; pipRect.w = w; pipRect.h = h;
   pipCam.aspect = w / h;
   pipCam.updateProjectionMatrix();
+}
+
+/* 遛鱼面板避让：浮漂小窗位置全程固定（见 layoutPip），由面板自己找空档。
+   默认贴手性一侧的底部；与小窗重叠时抬到小窗上方，上方塞不下就换到对面一侧，
+   最后再按顶栏高度兜底，保证任何窗口高度下面板都完整留在屏幕内。 */
+function layoutFightPanel() {
+  const W = window.innerWidth || document.documentElement.clientWidth || 1280;
+  const H = window.innerHeight || document.documentElement.clientHeight || 720;
+  const compact = W < 760;
+  const side = compact ? 12 : 24;
+  const baseBottom = compact ? 74 : 100;
+  const gap = 12;
+  const topbarEl = document.getElementById('topbar');
+  const minTop = (topbarEl ? topbarEl.getBoundingClientRect().bottom : 56) + 8;
+
+  const place = (right, bottom) => {
+    if (compact) {
+      fightPanel.style.left = side + 'px';
+      fightPanel.style.right = side + 'px';
+    } else {
+      fightPanel.style.left = right ? 'auto' : side + 'px';
+      fightPanel.style.right = right ? side + 'px' : 'auto';
+    }
+    fightPanel.style.bottom = Math.round(bottom) + 'px';
+  };
+
+  // 先按默认侧与默认底距落位，量到的才是自然尺寸
+  place(false, baseBottom);
+  const ph = fightPanel.offsetHeight;
+  const pw = fightPanel.offsetWidth;
+  let right = fightPanel.classList.contains('hand-left');
+  let bottom = baseBottom;
+
+  const hit = (r, b) => {
+    if (pipRect.w < 1) return false;
+    const x = r ? W - side - pw : side;
+    const y = H - b - ph;
+    return !(x + pw <= pipRect.x - gap || x >= pipRect.x + pipRect.w + gap ||
+             y + ph <= pipRect.y - gap || y >= pipRect.y + pipRect.h + gap);
+  };
+
+  if (hit(right, bottom)) {
+    // 先试抬到小窗上沿之外
+    const lifted = H - (pipRect.y - gap);
+    if (H - lifted - ph >= minTop) bottom = lifted;
+    else if (!compact) right = !right;   // 抬不动就换到小窗对面
+  }
+
+  // 兜底：顶端顶到顶栏安全区时整体下移，绝不出屏
+  const maxBottom = Math.max(8, H - minTop - ph);
+  if (bottom > maxBottom) bottom = maxBottom;
+  place(right, bottom);
 }
 
 function updatePipCamera(dt) {
@@ -4869,11 +4921,6 @@ function updatePipState() {
       pipSnap = true;
       layoutPip();
     }
-  }
-  // 遛鱼时面板贴左侧（右手模式），小窗让到右侧；切手性后同步重排
-  if (show) {
-    const wantRight = G.mode === 'FIGHT' && !fightPanel.classList.contains('hand-left');
-    if (wantRight !== pipRightSide) { pipRightSide = wantRight; layoutPip(); }
   }
   const bite = G.mode === 'BITE';
   pipWrap.classList.toggle('bite', bite);
@@ -4965,6 +5012,14 @@ function updateUI(dt) {
 
   // 遛鱼面板
   const fighting = G.mode === 'FIGHT' && G.fight;
+  if (fighting && (!fightPanelShown || fightPanelHand !== handSide)) {
+    // 面板每次出现、以及遛鱼中切手性时，按当前窗口与小窗位置重算避让
+    fightPanelShown = true;
+    fightPanelHand = handSide;
+    layoutFightPanel();
+  } else if (!fighting) {
+    fightPanelShown = false;
+  }
   fightPanel.classList.toggle('on', !!fighting);
   if (fighting) {
     const f = G.fight;
@@ -6546,6 +6601,7 @@ window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
   updatePostSize();
   layoutPip();
+  layoutFightPanel();
 });
 
 // 初始相机：第一帧就与静止状态一致，不做任何过渡
@@ -6555,6 +6611,7 @@ camState.pitch = 0.22;
 angler.rotation.y = camState.yaw + Math.PI;
 updateCamera(0.016);
 layoutPip();
+layoutFightPanel();
 
 // 供调试
 window.__game = { G, CONFIG, camState, camera, pipCam, pipRect, showResult, hookFish, landFish, reelIn, bobber, angler, merit: () => merit, saveProgress, renderDex };
