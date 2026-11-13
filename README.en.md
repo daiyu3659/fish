@@ -2,25 +2,25 @@
 
 English | [中文](README.md)
 
-A single-file 3D fishing game: a quiet lake at dawn, a cast, one bite, and a fish to bring in. Every scene, fish and UI element is generated in code — the whole project is one `index.html` you can download and double-click.
+**Time on the Water** is a 3D fishing game that runs in the browser: a quiet lake at dawn, a cast, one bite, and a fish to bring in. Every scene, fish and UI element is generated in code — the whole fishing game is one `index.html` you can download and double-click.
 
 - **No dependencies, no build step**: three.js r160 and post-processing are inlined; no CDN, npm or backend.
 - **One codebase for desktop and mobile**: mouse and touch both work, and portrait phones get the full experience.
 - **Bilingual UI**: switch between Chinese and English from the top-right corner.
 - **Plays offline**: runs without a network or straight from `file://`, with compatibility handling for WeChat's in-app browser.
 
-## Live demo
+## Play the 3D fishing game in your browser
 
 - GitHub Pages (primary): <https://daiyu3659.github.io/fish/>
 - Netlify (backup): <https://effervescent-valkyrie-652067.netlify.app>
 
-## Why this exists
+## Why a browser 3D fishing game
 
 - You want a quiet few minutes of fishing without installing a client or waiting for assets to load.
 - You want a small web game that can be hosted, embedded or shared as-is.
 - You want a reference for a single-file three.js build that relies entirely on procedural art.
 
-## Features
+## Gameplay and features
 
 - **Casting**: hold to charge and release to cast; distance scales from 7–46 m, and the camera follows the cast.
 - **Bite**: strike the moment the float goes under. The bite window varies by species, and you can reel in while waiting.
@@ -30,35 +30,35 @@ A single-file 3D fishing game: a quiet lake at dawn, a cast, one bite, and a fis
 - **Convenience**: left/right-handed rod toggle, sound toggle, catch history, release fish to earn merit, and progress saved in `localStorage`.
 - **Bilingual**: every label, fish name and tip has an English version.
 
-## Screenshots
+## Screenshots of the fishing game
 
 ### Desktop (1440×900)
 
 | Start | Core loop: fight | Result |
 | --- | --- | --- |
-| ![Desktop start](docs/screenshots/08_desktop_en_start.png) | ![Desktop fight](docs/screenshots/09_desktop_en_fight.png) | ![Desktop result](docs/screenshots/10_desktop_en_result.png) |
+| ![Start screen of the 3D fishing game at a quiet lake at dawn](docs/screenshots/08_desktop_en_start.png) | ![Reeling in a fish in the 3D fishing game, with the tension bar on screen](docs/screenshots/09_desktop_en_fight.png) | ![Result screen of the fishing game showing the species, weight and merit earned](docs/screenshots/10_desktop_en_result.png) |
 
 More of the loop: charging the cast, the bite, the catch log and the fish dex.
 
 | Casting | Bite | Catch log | Fish dex |
 | --- | --- | --- | --- |
-| ![Casting](docs/screenshots/17_desktop_en_casting.png) | ![Bite](docs/screenshots/18_desktop_en_bite.png) | ![Catch log](docs/screenshots/19_desktop_en_records.png) | ![Fish dex](docs/screenshots/20_desktop_en_dex.png) |
+| ![Charging a cast in the fishing game, with the power bar showing the distance](docs/screenshots/17_desktop_en_casting.png) | ![Bite moment in the 3D fishing game as the float dips under the water](docs/screenshots/18_desktop_en_bite.png) | ![Catch log in the fishing game listing the fish caught so far](docs/screenshots/19_desktop_en_records.png) | ![Fish dex in the 3D fishing game showing the unlocked species](docs/screenshots/20_desktop_en_dex.png) |
 
 ### Mobile (390×844, DPR 2)
 
 | Start | Fight | Result |
 | --- | --- | --- |
-| ![Mobile start](docs/screenshots/14_mobile_en_start.png) | ![Mobile fight](docs/screenshots/15_mobile_en_fight.png) | ![Mobile result](docs/screenshots/16_mobile_en_result.png) |
+| ![Mobile start screen of the 3D fishing game on a phone](docs/screenshots/14_mobile_en_start.png) | ![Reeling in a fish on a phone in the 3D fishing game](docs/screenshots/15_mobile_en_fight.png) | ![Mobile result screen of the fishing game](docs/screenshots/16_mobile_en_result.png) |
 
 More of the loop on a phone.
 
 | Casting | Bite | Catch log | Fish dex |
 | --- | --- | --- | --- |
-| ![Mobile casting](docs/screenshots/21_mobile_en_casting.png) | ![Mobile bite](docs/screenshots/22_mobile_en_bite.png) | ![Mobile catch log](docs/screenshots/23_mobile_en_records.png) | ![Mobile fish dex](docs/screenshots/24_mobile_en_dex.png) |
+| ![Charging a cast on a phone in the 3D fishing game](docs/screenshots/21_mobile_en_casting.png) | ![Bite prompt on a phone in the 3D fishing game](docs/screenshots/22_mobile_en_bite.png) | ![Catch log on a phone in the fishing game](docs/screenshots/23_mobile_en_records.png) | ![Fish dex on a phone in the 3D fishing game](docs/screenshots/24_mobile_en_dex.png) |
 
 Chinese screenshots are in the [Chinese README](README.md).
 
-## Quick start
+## Quick start: run the fishing game locally
 
 ### Requirements
 
@@ -106,7 +106,7 @@ fish/
 
 `index.html` is about 884 KB, most of it the inlined three.js and post-processing code. There is no build output and nothing to bundle. Tunable parameters live in the `CONFIG` object inside the file: cast feel, bite windows, tension, and the species table.
 
-## Deployment
+## Deploying the fishing game
 
 This is a purely static site. Pushing to `main` automatically triggers GitHub Actions ([.github/workflows/pages.yml](.github/workflows/pages.yml)), which publishes the repository root to GitHub Pages. There is no build command and no need to upload build output by hand.
 
@@ -126,7 +126,7 @@ This is a purely static site. Pushing to `main` automatically triggers GitHub Ac
 
 GitHub Pages, Cloudflare Pages, Vercel, static object storage, Nginx — anything that can serve `index.html`. No Node runtime, environment variables or server endpoints required.
 
-## Mobile support
+## The fishing game on mobile browsers
 
 Tested at 390×844 with DPR 2: the start screen, fight, result and catch panels all avoid horizontal scrolling, dialogs are 351 px wide, buttons and the tension bar stay fully visible, touch casting and reeling work, and the portrait layout holds up.
 
@@ -173,3 +173,7 @@ Address: 0xXXXX...
 - Catch records, merit, language and rod-handedness are stored only in browser `localStorage`; clearing site data resets them.
 - The page contains no third-party analytics, advertising or tracking scripts.
 - The demo is hosted on GitHub Pages (with a Netlify backup); the hosting platform may keep its own access logs, which is outside this project's code.
+
+## About this project
+
+Time on the Water is a 3D fishing game built with three.js and WebGL, packaged as a single HTML file that plays in any modern browser on desktop or phone. If you are looking for a browser fishing game with no install and no build step, one that also runs offline, or a reference for a single-file 3D game, this project is meant for that.

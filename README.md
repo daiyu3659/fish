@@ -2,7 +2,7 @@
 
 [English](README.en.md) | 中文
 
-一个单文件的 3D 垂钓小游戏：清晨的湖岸，抛竿、等一个咬口、把鱼遛上岸。全部场景、鱼和界面都由代码实时生成，整个项目只有一个 `index.html`，下载下来双击就能玩。
+《水面时光》是一个 3D 钓鱼游戏：单文件网页、无需构建，在浏览器里就能抛竿、等咬口、把鱼遛上岸。全部场景、鱼和界面都由代码实时生成，整个项目只有一个 `index.html`，下载下来双击就能玩。
 
 - **零依赖、零构建**：three.js r160 与后期处理直接内联，不依赖 CDN、npm 或后端。
 - **桌面与手机同一套代码**：鼠标、触屏都能操作，竖屏手机体验完整。
@@ -14,13 +14,13 @@
 - GitHub Pages（主站）：<https://daiyu3659.github.io/fish/>
 - Netlify（备用）：<https://effervescent-valkyrie-652067.netlify.app>
 
-## 解决什么问题
+## 为什么做这个 3D 钓鱼游戏
 
 - 想随手玩一段安静的钓鱼，不想装客户端、不想等资源加载；
 - 想找一个可以直接托管、嵌入或分享的网页小游戏；
 - 想参考一个不依赖美术素材、纯程序化生成的 three.js 单文件实现。
 
-## 主要功能
+## 玩法与功能
 
 - **抛竿**：按住蓄力，松开抛出，落点距离随蓄力在 7–46 m 之间变化，镜头跟随抛投方向。
 - **咬口**：浮漂下沉的瞬间扬竿；不同鱼种的咬口窗口不同，空等时可以主动收杆。
@@ -30,31 +30,31 @@
 - **辅助功能**：右手/左手持竿切换、音效开关、鱼获记录、放流积「功德」，进度自动保存在浏览器本地。
 - **中英双语**：所有界面文案、鱼名、鱼种提示均提供英文版本。
 
-## 界面截图
+## 钓鱼游戏截图
 
 ### 桌面版 · 中文（1440×900）
 
 | 首页 | 核心交互：遛鱼 | 结果页 |
 | --- | --- | --- |
-| ![桌面中文首页](docs/screenshots/01_desktop_zh_start.png) | ![桌面中文遛鱼](docs/screenshots/04_desktop_zh_fight.png) | ![桌面中文结算](docs/screenshots/05_desktop_zh_result.png) |
+| ![水面时光 3D 钓鱼游戏桌面首页，湖面与远山](docs/screenshots/01_desktop_zh_start.png) | ![3D 钓鱼游戏中遛鱼，界面显示张力条与收线提示](docs/screenshots/04_desktop_zh_fight.png) | ![钓鱼游戏结算页，显示鱼种、重量与功德](docs/screenshots/05_desktop_zh_result.png) |
 
 流程图补充：蓄力抛竿、咬口瞬间、鱼获记录与鱼鉴。
 
 | 蓄力 | 咬口 | 鱼获记录 | 鱼鉴 |
 | --- | --- | --- | --- |
-| ![蓄力](docs/screenshots/02_desktop_zh_casting.png) | ![咬口](docs/screenshots/03_desktop_zh_bite.png) | ![鱼获记录](docs/screenshots/06_desktop_zh_records.png) | ![鱼鉴](docs/screenshots/07_desktop_zh_dex.png) |
+| ![3D 钓鱼游戏蓄力抛竿，力量条示意落点距离](docs/screenshots/02_desktop_zh_casting.png) | ![钓鱼游戏浮漂下沉的咬口瞬间](docs/screenshots/03_desktop_zh_bite.png) | ![钓鱼游戏鱼获记录列表](docs/screenshots/06_desktop_zh_records.png) | ![3D 钓鱼游戏鱼鉴，展示已解锁鱼种](docs/screenshots/07_desktop_zh_dex.png) |
 
 ### 移动版 · 中文（390×844，DPR 2）
 
 | 首页 | 遛鱼 | 结果页 |
 | --- | --- | --- |
-| ![移动中文首页](docs/screenshots/11_mobile_zh_start.png) | ![移动中文遛鱼](docs/screenshots/12_mobile_zh_fight.png) | ![移动中文结算](docs/screenshots/13_mobile_zh_result.png) |
+| ![手机上的 3D 钓鱼游戏首页](docs/screenshots/11_mobile_zh_start.png) | ![手机端钓鱼游戏遛鱼界面](docs/screenshots/12_mobile_zh_fight.png) | ![手机端钓鱼游戏结算页](docs/screenshots/13_mobile_zh_result.png) |
 
 流程图补充：蓄力抛竿、咬口瞬间、鱼获记录与鱼鉴。
 
 | 蓄力 | 咬口 | 鱼获记录 | 鱼鉴 |
 | --- | --- | --- | --- |
-| ![移动蓄力](docs/screenshots/25_mobile_zh_casting.png) | ![移动咬口](docs/screenshots/26_mobile_zh_bite.png) | ![移动鱼获记录](docs/screenshots/27_mobile_zh_records.png) | ![移动鱼鉴](docs/screenshots/28_mobile_zh_dex.png) |
+| ![手机端 3D 钓鱼游戏蓄力抛竿](docs/screenshots/25_mobile_zh_casting.png) | ![手机端钓鱼游戏咬口提示](docs/screenshots/26_mobile_zh_bite.png) | ![手机端钓鱼游戏鱼获记录](docs/screenshots/27_mobile_zh_records.png) | ![手机端 3D 钓鱼游戏鱼鉴](docs/screenshots/28_mobile_zh_dex.png) |
 
 英文界面截图见 [README.en.md](README.en.md)。
 
@@ -173,3 +173,7 @@ GitHub Pages、Cloudflare Pages、Vercel、对象存储静态网站、Nginx 等�
 - 鱼获记录、功德、语言和持竿手仅保存在浏览器 `localStorage`，清除站点数据即会重置；
 - 页面不包含第三方统计、广告或追踪脚本；
 - 演示站托管在 GitHub Pages（备用站为 Netlify），托管平台自身可能记录访问日志，这与本项目代码无关。
+
+## 关于这个项目
+
+《水面时光》是一个用 Three.js 和 WebGL 写的 3D 钓鱼游戏，整个游戏打包在一个 HTML 文件里，可以直接在浏览器或手机上游玩。如果你在找一款无需安装、可离线运行的网页钓鱼游戏，或者想参考单文件 3D 游戏的实现方式，这个项目就是为此准备的。
