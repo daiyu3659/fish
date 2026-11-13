@@ -167,11 +167,7 @@
   }
   #fightPanel.hand-left{left:auto;right:24px;}
   #fightPanel.hand-left .fightBody{flex-direction:row-reverse;}
-  /* 宽屏时浮漂小窗固定在左下，右手模式的遛鱼面板抬到小窗上方，避免遮挡 */
-  @media (min-width:761px){
-    #fightPanel{bottom:348px;}
-    #fightPanel.hand-left{bottom:100px;}
-  }
+  /* 面板始终贴屏幕侧边底部；遛鱼时浮漂小窗自动避到另一侧，不再把面板往上顶 */
   #fightPanel.on{opacity:1;transform:translateY(0);}
   .fLabel{
     display:flex;justify-content:space-between;align-items:baseline;
@@ -4764,6 +4760,8 @@ function updateCamera(dt) {
 const pipRect = { x: 0, y: 0, w: 0, h: 0 };
 const pipLook = new THREE.Vector3();
 let pipVisible = false;
+// 遛鱼面板占左侧时，浮漂小窗换到右侧，两者都贴底且不重叠
+let pipRightSide = false;
 let pipSnap = true;
 
 const pipRT = new THREE.WebGLRenderTarget(2, 2, { depthBuffer: true, stencilBuffer: false });
@@ -4813,7 +4811,7 @@ function layoutPip() {
     ? Math.round(clamp(W * 0.42, 150, 200))
     : Math.round(clamp(W * 0.24, 260, 340));
   const h = Math.round(w * 0.66);
-  const x = compact ? 12 : 24;
+  const x = compact ? 12 : (pipRightSide ? Math.round(W - w - 24) : 24);
   const y = compact ? 58 : Math.round(H - 118 - h);
 
   // 离屏缓冲按像素比放大，贴片用 NDC 定位到同一矩形，保证与 DOM 边框完全重合
@@ -4871,6 +4869,11 @@ function updatePipState() {
       pipSnap = true;
       layoutPip();
     }
+  }
+  // 遛鱼时面板贴左侧（右手模式），小窗让到右侧；切手性后同步重排
+  if (show) {
+    const wantRight = G.mode === 'FIGHT' && !fightPanel.classList.contains('hand-left');
+    if (wantRight !== pipRightSide) { pipRightSide = wantRight; layoutPip(); }
   }
   const bite = G.mode === 'BITE';
   pipWrap.classList.toggle('bite', bite);
