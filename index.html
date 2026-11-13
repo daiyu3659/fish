@@ -165,7 +165,7 @@
     padding:16px 18px 14px;opacity:0;transform:translateY(12px);
     transition:opacity .25s ease,transform .25s ease;pointer-events:none;
   }
-  #fightPanel.hand-left{left:auto;right:24px;}
+  /* 手性只决定色条在面板内的哪一侧（右手→左，左手→右），面板整体位置始终由 JS 决定，不随手性移动 */
   #fightPanel.hand-left .fightBody{flex-direction:row-reverse;}
   /* 侧边与底距由 JS layoutFightPanel() 按可用空间写入，避开位置固定的浮漂小窗 */
   #fightPanel.on{opacity:1;transform:translateY(0);}
@@ -4002,6 +4002,9 @@ function applyHand(side, save) {
   fightPanel.classList.toggle('hand-left', handSide === 'left');
   btnHand.textContent = handSide === 'left' ? T('左手', 'Left') : T('右手', 'Right');
   if (save) { try { localStorage.setItem(HAND_KEY, handSide); } catch (e) { /* 隐私模式下忽略 */ } }
+  // 行内 left/right 优先级高于 .hand-left 样式，切手后必须立刻重算落点，
+  // 否则面板会停在旧的一侧（非遛鱼时更明显）。放到下一帧，避免初始化阶段读取未就绪的 pipRect。
+  requestAnimationFrame(layoutFightPanel);
 }
 try { applyHand(localStorage.getItem(HAND_KEY) || 'right', false); } catch (e) { applyHand('right', false); }
 btnHand.addEventListener('click', () => applyHand(handSide === 'left' ? 'right' : 'left', true));
@@ -4834,8 +4837,9 @@ function layoutPip() {
 }
 
 /* 遛鱼面板避让：浮漂小窗位置全程固定（见 layoutPip），由面板自己找空档。
-   默认贴手性一侧的底部；与小窗重叠时抬到小窗上方，上方塞不下就换到对面一侧，
-   最后再按顶栏高度兜底，保证任何窗口高度下面板都完整留在屏幕内。 */
+   面板整体始终贴右侧，位置只随窗口尺寸/避让微调，与左右手无关（手性只换面板内色条的一侧）。
+   候选顺序：右侧底部 → 右侧抬到小窗上方（须离顶栏有舒适余量）→ 横向让开小窗 → 左侧底部 → 左侧抬升。
+   每个候选都要求：完整在屏内、不压顶栏安全区、不与小窗相交；全都不满足时退回右侧兜底。 */
 function layoutFightPanel() {
   const W = window.innerWidth || document.documentElement.clientWidth || 1280;
   const H = window.innerHeight || document.documentElement.clientHeight || 720;
@@ -4845,11 +4849,20 @@ function layoutFightPanel() {
   const gap = 12;
   const topbarEl = document.getElementById('topbar');
   const minTop = (topbarEl ? topbarEl.getBoundingClientRect().bottom : 56) + 8;
+  const comfortTop = minTop + 24;   // 抬升后离顶栏不足这个距离就宁可换位置
+  const edge = 8;
 
-  const place = (right, bottom) => {
+  // 面板整体固定在右侧，位置只随窗口尺寸与避让小窗微调，与手性无关。
+  // hand-left 只让面板内部色条换到右端（见 CSS flex-direction）。
+  fightPanel.classList.toggle('hand-left', handSide === 'left');
+
+  const place = (right, bottom, leftX) => {
     if (compact) {
       fightPanel.style.left = side + 'px';
       fightPanel.style.right = side + 'px';
+    } else if (leftX != null) {
+      fightPanel.style.left = Math.round(leftX) + 'px';
+      fightPanel.style.right = 'auto';
     } else {
       fightPanel.style.left = right ? 'auto' : side + 'px';
       fightPanel.style.right = right ? side + 'px' : 'auto';
@@ -4857,32 +4870,39 @@ function layoutFightPanel() {
     fightPanel.style.bottom = Math.round(bottom) + 'px';
   };
 
-  // 先按默认侧与默认底距落位，量到的才是自然尺寸
-  place(false, baseBottom);
+  // 先按默认位置与默认底距落位，量到的才是自然尺寸
+  place(true, baseBottom, null);
   const ph = fightPanel.offsetHeight;
   const pw = fightPanel.offsetWidth;
-  let right = fightPanel.classList.contains('hand-left');
-  let bottom = baseBottom;
+  const maxBottom = Math.max(edge, H - minTop - ph);
+  const xOf = (right, leftX) => (leftX != null ? leftX : (right ? W - side - pw : side));
+  const yOf = b => H - b - ph;
+  const clearPip = (x, y) => pipRect.w < 1 ||
+    x + pw <= pipRect.x - gap || x >= pipRect.x + pipRect.w + gap ||
+    y + ph <= pipRect.y - gap || y >= pipRect.y + pipRect.h + gap;
 
-  const hit = (r, b) => {
-    if (pipRect.w < 1) return false;
-    const x = r ? W - side - pw : side;
-    const y = H - b - ph;
-    return !(x + pw <= pipRect.x - gap || x >= pipRect.x + pipRect.w + gap ||
-             y + ph <= pipRect.y - gap || y >= pipRect.y + pipRect.h + gap);
-  };
+  const liftBottom = pipRect.w > 0 ? H - (pipRect.y - gap) : baseBottom;
+  const shiftX = pipRect.w > 0 ? pipRect.x - gap - pw : null;   // 让到小窗左侧（小窗固定在左下）
+  const shiftFits = shiftX != null && shiftX >= side && shiftX + pw <= W - side;
 
-  if (hit(right, bottom)) {
-    // 先试抬到小窗上沿之外
-    const lifted = H - (pipRect.y - gap);
-    if (H - lifted - ph >= minTop) bottom = lifted;
-    else if (!compact) right = !right;   // 抬不动就换到小窗对面
+  const cands = [
+    { right: true, bottom: baseBottom, leftX: null },                      // 1 右侧底部（绝大多数窗口）
+    { right: true, bottom: liftBottom, leftX: null, topLimit: comfortTop },// 2 右侧抬到小窗上方
+    { right: true, bottom: baseBottom, leftX: shiftFits ? shiftX : null }, // 3 横向让开小窗
+    { right: false, bottom: baseBottom, leftX: null },                     // 4 极端窄窗口的兜底：左侧底部
+    { right: false, bottom: liftBottom, leftX: null },                     // 5 左侧抬升
+  ];
+  for (const c of cands) {
+    const b = Math.min(c.bottom, maxBottom);
+    const y = yOf(b);
+    if (y < (c.topLimit || minTop) - 0.5) continue;
+    if (!clearPip(xOf(c.right, c.leftX), y)) continue;
+    if (y + ph > H - edge + 0.5) continue;
+    place(c.right, b, c.leftX);
+    return;
   }
-
-  // 兜底：顶端顶到顶栏安全区时整体下移，绝不出屏
-  const maxBottom = Math.max(8, H - minTop - ph);
-  if (bottom > maxBottom) bottom = maxBottom;
-  place(right, bottom);
+  // 兜底：仍贴右侧，压进顶栏安全区，至少保证不出屏
+  place(true, Math.min(baseBottom, maxBottom), null);
 }
 
 function updatePipCamera(dt) {
