@@ -9,6 +9,11 @@
 - **中英双语**：界面右上角可实时切换。
 - **离线可玩**：断网或直接用 `file://` 打开也能运行，并针对微信内置浏览器做了兼容处理。
 
+## 在线演示
+
+- GitHub Pages（主站）：<https://daiyu3659.github.io/fish/>
+- Netlify（备用）：<https://effervescent-valkyrie-652067.netlify.app>
+
 ## 解决什么问题
 
 - 想随手玩一段安静的钓鱼，不想装客户端、不想等资源加载；
@@ -103,14 +108,19 @@ fish/
 
 ## 部署
 
-这是一个纯静态站点，任何静态托管都能直接使用。
+这是一个纯静态站点。推送到 `main` 会自动触发 GitHub Actions（[.github/workflows/pages.yml](.github/workflows/pages.yml)），把仓库根目录发布到 GitHub Pages；没有构建命令，也不需要在网页上手动上传产物。
 
-### Netlify（当前演示）
+### GitHub Pages（主站）
 
-- 演示地址：<https://effervescent-valkyrie-652067.netlify.app>
-- 构建命令：留空
-- 发布目录：仓库根目录
-- 也可以把整个项目目录直接拖进 Netlify Drop 完成部署
+- 地址：<https://daiyu3659.github.io/fish/>
+- 发布内容：仓库根目录
+- 触发方式：推送到 `main`，或在 Actions 页面手动运行 `workflow_dispatch`
+- 首次启用：仓库 Settings → Pages → Source 选择 **GitHub Actions**
+
+### Netlify（备用）
+
+- 备用地址：<https://effervescent-valkyrie-652067.netlify.app>
+- 构建命令留空，发布目录为仓库根目录；也可以把整个项目目录拖进 Netlify Drop
 
 ### 其它方式
 
@@ -162,4 +172,4 @@ GitHub Pages、Cloudflare Pages、Vercel、对象存储静态网站、Nginx 等�
 - 没有后端、没有账号系统，也不会上传任何游戏数据；
 - 鱼获记录、功德、语言和持竿手仅保存在浏览器 `localStorage`，清除站点数据即会重置；
 - 页面不包含第三方统计、广告或追踪脚本；
-- 演示站托管在 Netlify，托管平台自身可能记录访问日志，这与本项目代码无关。
+- 演示站托管在 GitHub Pages（备用站为 Netlify），托管平台自身可能记录访问日志，这与本项目代码无关。

@@ -9,6 +9,11 @@ A single-file 3D fishing game: a quiet lake at dawn, a cast, one bite, and a fis
 - **Bilingual UI**: switch between Chinese and English from the top-right corner.
 - **Plays offline**: runs without a network or straight from `file://`, with compatibility handling for WeChat's in-app browser.
 
+## Live demo
+
+- GitHub Pages (primary): <https://daiyu3659.github.io/fish/>
+- Netlify (backup): <https://effervescent-valkyrie-652067.netlify.app>
+
 ## Why this exists
 
 - You want a quiet few minutes of fishing without installing a client or waiting for assets to load.
@@ -103,14 +108,19 @@ fish/
 
 ## Deployment
 
-This is a purely static site, so any static host works.
+This is a purely static site. Pushing to `main` automatically triggers GitHub Actions ([.github/workflows/pages.yml](.github/workflows/pages.yml)), which publishes the repository root to GitHub Pages. There is no build command and no need to upload build output by hand.
 
-### Netlify (current demo)
+### GitHub Pages (primary)
 
-- Demo: <https://effervescent-valkyrie-652067.netlify.app>
-- Build command: leave empty
-- Publish directory: repository root
-- You can also drag the project folder into Netlify Drop
+- URL: <https://daiyu3659.github.io/fish/>
+- Published content: repository root
+- Trigger: push to `main`, or run `workflow_dispatch` manually from the Actions tab
+- First-time setup: Settings → Pages → Source → **GitHub Actions**
+
+### Netlify (backup)
+
+- Backup URL: <https://effervescent-valkyrie-652067.netlify.app>
+- Build command empty, publish directory the repository root; you can also drag the project folder into Netlify Drop
 
 ### Other options
 
@@ -162,4 +172,4 @@ Address: 0xXXXX...
 - There is no backend and no account system, and no gameplay data is uploaded.
 - Catch records, merit, language and rod-handedness are stored only in browser `localStorage`; clearing site data resets them.
 - The page contains no third-party analytics, advertising or tracking scripts.
-- The demo is hosted on Netlify; the hosting platform may keep its own access logs, which is outside this project's code.
+- The demo is hosted on GitHub Pages (with a Netlify backup); the hosting platform may keep its own access logs, which is outside this project's code.
