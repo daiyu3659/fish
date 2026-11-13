@@ -1,5 +1,7 @@
 # 水面时光 · Time on the Water
 
+[English](README.en.md) | 中文
+
 一个单文件的 3D 垂钓小游戏：清晨的湖岸，抛竿、等一个咬口、把鱼遛上岸。全部场景、鱼和界面都由代码实时生成，整个项目只有一个 `index.html`，下载下来双击就能玩。
 
 - **零依赖、零构建**：three.js r160 与后期处理直接内联，不依赖 CDN、npm 或后端。
@@ -37,23 +39,19 @@
 | --- | --- | --- | --- |
 | ![蓄力](docs/screenshots/02_desktop_zh_casting.png) | ![咬口](docs/screenshots/03_desktop_zh_bite.png) | ![鱼获记录](docs/screenshots/06_desktop_zh_records.png) | ![鱼鉴](docs/screenshots/07_desktop_zh_dex.png) |
 
-### 桌面版 · English（1440×900）
-
-| Start | Fight | Result |
-| --- | --- | --- |
-| ![Desktop English start](docs/screenshots/08_desktop_en_start.png) | ![Desktop English fight](docs/screenshots/09_desktop_en_fight.png) | ![Desktop English result](docs/screenshots/10_desktop_en_result.png) |
-
 ### 移动版 · 中文（390×844，DPR 2）
 
 | 首页 | 遛鱼 | 结果页 |
 | --- | --- | --- |
 | ![移动中文首页](docs/screenshots/11_mobile_zh_start.png) | ![移动中文遛鱼](docs/screenshots/12_mobile_zh_fight.png) | ![移动中文结算](docs/screenshots/13_mobile_zh_result.png) |
 
-### 移动版 · English（390×844，DPR 2）
+流程图补充：蓄力抛竿、咬口瞬间、鱼获记录与鱼鉴。
 
-| Start | Fight | Result |
-| --- | --- | --- |
-| ![Mobile English start](docs/screenshots/14_mobile_en_start.png) | ![Mobile English fight](docs/screenshots/15_mobile_en_fight.png) | ![Mobile English result](docs/screenshots/16_mobile_en_result.png) |
+| 蓄力 | 咬口 | 鱼获记录 | 鱼鉴 |
+| --- | --- | --- | --- |
+| ![移动蓄力](docs/screenshots/25_mobile_zh_casting.png) | ![移动咬口](docs/screenshots/26_mobile_zh_bite.png) | ![移动鱼获记录](docs/screenshots/27_mobile_zh_records.png) | ![移动鱼鉴](docs/screenshots/28_mobile_zh_dex.png) |
+
+英文界面截图见 [README.en.md](README.en.md)。
 
 ## 快速开始
 
@@ -92,8 +90,10 @@ python3 -m http.server 8123
 ```text
 fish/
 ├── index.html                  # 游戏本体：界面、样式、three.js r160 与全部逻辑
+├── favicon.svg                 # 矢量图标：浮漂与水面
 ├── docs/screenshots/           # README 使用的中英 / 桌面移动截图
-├── README.md
+├── README.md                   # 中文说明
+├── README.en.md                # English
 ├── THIRD-PARTY-NOTICES.md      # 第三方组件与许可声明
 ├── LICENSE                     # AGPL-3.0
 └── .gitignore
